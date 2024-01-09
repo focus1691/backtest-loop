@@ -41,6 +41,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "@tsquant/exchangeapi": "^0.0.28",
     "rxjs": "^7.8.1"
   }
 }
