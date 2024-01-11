@@ -1,5 +1,5 @@
 import { Subject } from 'rxjs'
-import { IBacktesterConfig } from './lib/types'
+import { IBacktesterConfig, PriceEvent } from './lib/types'
 import { Exchange, INTERVALS, KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
 import { ICandle, IFundingRateValue, IOpenInterestValue } from '@tsquant/exchangeapi/dist/lib/types'
 
@@ -15,12 +15,6 @@ type SymbolIntervalIndexes = {
   }
 }
 
-export interface PriceUpdate {
-  exchange: Exchange
-  symbol: string
-  price: number
-}
-
 export class Backtester {
   private symbol: string
   private symbolIntervalData: SymbolIntervalData
@@ -31,7 +25,7 @@ export class Backtester {
   private acknowledgementPromiseResolve: Function | null = null
   private eventEmitted: boolean = false
   private closedCandles$: Subject<ICandle> = new Subject()
-  private priceUpdates$: Subject<PriceUpdate[]> = new Subject()
+  private priceEvents$: Subject<PriceEvent> = new Subject()
 
   constructor(config: IBacktesterConfig) {
     this.symbol = config.symbol
@@ -78,8 +72,8 @@ export class Backtester {
         if (this.currTime >= nextCandleTime) {
           // One minute candles are used for price events
           if (interval === INTERVALS.ONE_MINUTE) {
-            const priceUpdates: PriceUpdate[] = [{ symbol: this.symbol, exchange: Exchange.BINANCE, price: candle.close }]
-            this.priceUpdates$.next(priceUpdates)
+            const priceEvent: PriceEvent = { symbol: this.symbol, exchange: Exchange.BINANCE, price: candle.close }
+            this.priceEvents$.next(priceEvent)
           } else {
             this.closedCandles$.next(candle)
           }
