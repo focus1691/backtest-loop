@@ -1,4 +1,5 @@
 import { Subject } from 'rxjs'
+import { IBacktesterConfig } from './lib/types'
 import { Exchange, INTERVALS, KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
 import { ICandle, IFundingRateValue, IOpenInterestValue } from '@tsquant/exchangeapi/dist/lib/types'
 
@@ -32,11 +33,11 @@ export class Backtester {
   private closedCandles$: Subject<ICandle> = new Subject()
   private priceUpdates$: Subject<PriceUpdate[]> = new Subject()
 
-  constructor(symbol: string, symbolIntervalData: SymbolIntervalData) {
-    this.symbol = symbol
-    this.symbolIntervalData = symbolIntervalData
-    this.intervalBounds = this.setupIntervalBounds(symbol, symbolIntervalData)
-    this.determineStartAndEndTimes(symbol)
+  constructor(config: IBacktesterConfig) {
+    this.symbol = config.symbol
+    this.symbolIntervalData = config.data
+    this.intervalBounds = this.setupIntervalBounds(config.symbol, config.data)
+    this.determineStartAndEndTimes(config.symbol)
   }
 
   // Find the start and end times based on the candles data
@@ -79,11 +80,11 @@ export class Backtester {
           if (interval === INTERVALS.ONE_MINUTE) {
             const priceUpdates: PriceUpdate[] = [{ symbol: this.symbol, exchange: Exchange.BINANCE, price: candle.close }]
             this.priceUpdates$.next(priceUpdates)
-            this.eventEmitted = true
           } else {
             this.closedCandles$.next(candle)
-            this.eventEmitted = true
           }
+
+          this.eventEmitted = true
 
           this.intervalBounds[this.symbol][interval].curr++
 
@@ -102,19 +103,21 @@ export class Backtester {
 
   *backtestGenerator() {
     while (this.shouldContinueBacktest()) {
-      // Wait for acknowledgement if an event was emitted in the previous step
+      // If an event was emitted in the previous step, wait for acknowledgement
       if (this.eventEmitted) {
         yield new Promise((resolve) => {
           this.acknowledgementPromiseResolve = resolve
         })
-        this.eventEmitted = false // Reset the flag after acknowledgement
+        // Don't reset the flag here; it should be reset in acknowledgeEventHandling
       }
 
-      // Perform the next step forward only after the above acknowledgement is complete
-      this.stepForward()
+      // Only proceed with stepForward if there's no pending event acknowledgment
+      if (!this.eventEmitted) {
+        this.stepForward()
 
-      // Yield control back after stepping forward to allow for potential acknowledgement in the next iteration
-      yield
+        // Yield control back after stepping forward to allow for potential acknowledgement in the next iteration
+        yield
+      }
     }
   }
 
@@ -122,7 +125,9 @@ export class Backtester {
     if (this.acknowledgementPromiseResolve) {
       this.acknowledgementPromiseResolve()
       this.acknowledgementPromiseResolve = null
+      this.eventEmitted = false // Reset the flag after acknowledgement
     }
+    return this
   }
 
   // Method to control the progression of the backtest
