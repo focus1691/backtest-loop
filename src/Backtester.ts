@@ -1,29 +1,11 @@
 import { Subject } from 'rxjs'
-import { Exchange, INTERVALS, KlineIntervals } from '@tsquant/exchangeapi/dist/lib/constants'
+import { Exchange, INTERVALS, KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
 import { ICandle, IFundingRateValue, IOpenInterestValue } from '@tsquant/exchangeapi/dist/lib/types'
 
 export type SymbolIntervalData = {
   [symbol: string]: {
     [interval: string]: (IFundingRateValue | ICandle | IOpenInterestValue)[]
   }
-}
-
-const ONE_MINUTE_MS = 60 * 1000
-const ONE_HOUR_MS = ONE_MINUTE_MS * 60
-
-const KlineIntervalMs: Record<KlineIntervals, number> = {
-  [KlineIntervals.ONE_MIN]: ONE_MINUTE_MS,
-  [KlineIntervals.FIVE_MINS]: ONE_MINUTE_MS * 5,
-  [KlineIntervals.FIFTHTEEN_MINS]: ONE_MINUTE_MS * 15,
-  [KlineIntervals.THIRTY_MINS]: ONE_MINUTE_MS * 30,
-  [KlineIntervals.ONE_HOUR]: ONE_HOUR_MS,
-  [KlineIntervals.TWO_HOURS]: ONE_HOUR_MS * 2,
-  [KlineIntervals.FOUR_HOURS]: ONE_HOUR_MS * 4,
-  [KlineIntervals.SIX_HOURS]: ONE_HOUR_MS * 6,
-  [KlineIntervals.TWELVE_HOURS]: ONE_HOUR_MS * 12,
-  [KlineIntervals.ONE_DAY]: ONE_HOUR_MS * 24,
-  [KlineIntervals.ONE_WEEK]: ONE_HOUR_MS * 24 * 7,
-  [KlineIntervals.ONE_MONTH]: 2591999999 + 1 // 1 month interval size used by binance 1569887999999 - 1567296000000
 }
 
 type SymbolIntervalIndexes = {
@@ -38,21 +20,17 @@ export interface PriceUpdate {
   price: number
 }
 
-export type PriceUpdates = PriceUpdate[]
-
 export class Backtester {
   private symbol: string
   private symbolIntervalData: SymbolIntervalData
   private intervalBounds: SymbolIntervalIndexes
-  private startTime: Date | undefined
-  private endTime: Date | undefined
-  private currTime: Date | undefined
+  private currTime: Date = new Date()
   private backtestIterator: Generator<unknown, void, unknown> | undefined
   // eslint-disable-next-line @typescript-eslint/ban-types
   private acknowledgementPromiseResolve: Function | null = null
   private eventEmitted: boolean = false
   private closedCandles$: Subject<ICandle> = new Subject()
-  private priceUpdates$: Subject<PriceUpdates> = new Subject()
+  private priceUpdates$: Subject<PriceUpdate[]> = new Subject()
 
   constructor(symbol: string, symbolIntervalData: SymbolIntervalData) {
     this.symbol = symbol
@@ -66,19 +44,10 @@ export class Backtester {
     const oneMinuteCandles: ICandle[] = this.symbolIntervalData[symbol][INTERVALS.ONE_MINUTE] as ICandle[]
 
     if (oneMinuteCandles && oneMinuteCandles.length > 0) {
-      const symbolStartTime = oneMinuteCandles[0].openTime // First candle's open time
-      const symbolEndTime = oneMinuteCandles[oneMinuteCandles.length - 1].openTime // Last candle's open time
-
-      if (this.startTime === null || symbolStartTime < this.startTime) {
-        this.startTime = symbolStartTime
-      }
-
-      if (this.endTime === null || symbolEndTime > this.endTime) {
-        this.endTime = symbolEndTime
-      }
+      const symbolStartTime = new Date(oneMinuteCandles[0].openTime) // First candle's open time
 
       // Set currTime to 1 minute before startTime
-      this.currTime = new Date(this.startTime.getTime() - KlineIntervalMs['1m'])
+      this.currTime = new Date(symbolStartTime.getTime() - KlineIntervalMs['1m'])
     } else {
       throw new Error('Could not determine start and end')
     }
@@ -86,10 +55,10 @@ export class Backtester {
 
   // Initialize indexes for each symbol and interval
   private setupIntervalBounds(symbol: string, symbolIntervalData: SymbolIntervalData) {
-    const bounds = { [symbol]: {} }
+    const bounds: SymbolIntervalIndexes = { [symbol]: {} }
 
     for (const interval in symbolIntervalData[symbol]) {
-      bounds[symbol][interval] = { curr: 0, start: 0, end: 0, isComplete: Boolean(symbolIntervalData[symbol][interval]?.length) }
+      bounds[symbol][interval] = { curr: 0, start: 0, end: 0, isComplete: false }
     }
     return bounds
   }
@@ -108,7 +77,7 @@ export class Backtester {
         if (this.currTime >= nextCandleTime) {
           // One minute candles are used for price events
           if (interval === INTERVALS.ONE_MINUTE) {
-            const priceUpdates: PriceUpdates = [{ symbol: this.symbol, exchange: Exchange.BINANCE, price: candle.close }]
+            const priceUpdates: PriceUpdate[] = [{ symbol: this.symbol, exchange: Exchange.BINANCE, price: candle.close }]
             this.priceUpdates$.next(priceUpdates)
             this.eventEmitted = true
           } else {
