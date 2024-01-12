@@ -16,22 +16,30 @@ type SymbolIntervalIndexes = {
 }
 
 export class Backtester {
+  private config: IBacktesterConfig
+
   private symbol: string
-  private symbolIntervalData: SymbolIntervalData
+  private candles: SymbolIntervalData
   private intervalBounds: SymbolIntervalIndexes
   private currTime: Date = new Date()
+  private didInitCandles: boolean = false
+
+  // Generator stuff
   private backtestIterator: Generator<unknown, void, unknown> | undefined
   // eslint-disable-next-line @typescript-eslint/ban-types
   private acknowledgementPromiseResolve: Function | null = null
+
   private eventEmitted: boolean = false
+
+  // Websocket type events
   private closedCandles$: Subject<ICandle> = new Subject()
   private priceEvents$: Subject<PriceEvent> = new Subject()
 
-  constructor(config: IBacktesterConfig) {
-    this.symbol = config.symbol
-    this.symbolIntervalData = config.data
-    this.intervalBounds = this.setupIntervalBounds(config.symbol, config.data)
-    this.determineStartAndEndTimes(config.symbol)
+  constructor(config?: IBacktesterConfig) {
+    this.config = {
+      intervalToFindStartAndEndTimes: INTERVALS.ONE_MINUTE,
+      ...config
+    }
   }
 
   get closedCandles(): Observable<ICandle> {
@@ -42,9 +50,49 @@ export class Backtester {
     return this.priceEvents$.asObservable()
   }
 
+  init(symbol: string, candles: SymbolIntervalData) {
+    if (this.didInitCandles) {
+      console.warn('Backtester is running and has already been initialised with candles')
+      return
+    }
+
+    if (!this.symbol) {
+      throw new Error('Symbol required')
+    }
+    if (!candles) {
+      throw new Error('Candles are undefined or null')
+    }
+
+    if (!(this.symbol in candles)) {
+      throw new Error(`No data for symbol: ${this.symbol}`)
+    }
+
+    const interval = this.config.intervalToFindStartAndEndTimes
+    if (!interval) {
+      throw new Error('Interval is undefined')
+    }
+
+    if (!(interval in candles[this.symbol])) {
+      throw new Error(`No data for interval: ${interval} for symbol: ${this.symbol}`)
+    }
+
+    const candleData = candles[this.symbol][interval]
+    if (!candleData || candleData.length === 0) {
+      throw new Error(`No candle data for interval: ${interval} and symbol: ${this.symbol}`)
+    }
+
+    this.symbol = symbol
+    this.candles = candles
+
+    this.didInitCandles = true
+
+    this.intervalBounds = this.setupIntervalBounds(symbol, candles)
+    this.determineStartAndEndTimes(symbol)
+  }
+
   // Find the start and end times based on the candles data
   private determineStartAndEndTimes(symbol: string) {
-    const oneMinuteCandles: ICandle[] = this.symbolIntervalData[symbol][INTERVALS.ONE_MINUTE] as ICandle[]
+    const oneMinuteCandles: ICandle[] = this.candles[symbol][this.config.intervalToFindStartAndEndTimes] as ICandle[]
 
     if (oneMinuteCandles && oneMinuteCandles.length > 0) {
       const symbolStartTime = new Date(oneMinuteCandles[0].openTime) // First candle's open time
@@ -57,10 +105,10 @@ export class Backtester {
   }
 
   // Initialize indexes for each symbol and interval
-  private setupIntervalBounds(symbol: string, symbolIntervalData: SymbolIntervalData) {
+  private setupIntervalBounds(symbol: string, candles: SymbolIntervalData) {
     const bounds: SymbolIntervalIndexes = { [symbol]: {} }
 
-    for (const interval in symbolIntervalData[symbol]) {
+    for (const interval in candles[symbol]) {
       bounds[symbol][interval] = { curr: 0, start: 0, end: 0, isComplete: false }
     }
     return bounds
@@ -69,8 +117,8 @@ export class Backtester {
   stepForward() {
     this.currTime = new Date(this.currTime.getTime() + KlineIntervalMs['1m'])
 
-    for (const interval in this.symbolIntervalData[this.symbol]) {
-      const candles = this.symbolIntervalData[this.symbol][interval]
+    for (const interval in this.candles[this.symbol]) {
+      const candles = this.candles[this.symbol][interval]
 
       // Check if the current time is the time for the next candle in this interval
       if (!this.intervalBounds[this.symbol][interval].isComplete) {
@@ -97,7 +145,7 @@ export class Backtester {
   }
 
   shouldContinueBacktest(): boolean {
-    for (const interval in this.symbolIntervalData[this.symbol]) {
+    for (const interval in this.candles[this.symbol]) {
       if (!this.intervalBounds[this.symbol][interval].isComplete) return true
     }
     return false
@@ -134,6 +182,9 @@ export class Backtester {
 
   // Method to control the progression of the backtest
   runNextStep() {
+    if (!this.didInitCandles) {
+      console.log('Backtest not initialised with data. Call init() before calling this method.')
+    }
     if (!this.backtestIterator) {
       this.backtestIterator = this.backtestGenerator()
     }

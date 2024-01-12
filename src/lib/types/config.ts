@@ -1,6 +1,5 @@
-import { SymbolIntervalData } from '../../Backtester'
+import { INTERVALS } from '@tsquant/exchangeapi/dist/lib/constants'
 
 export interface IBacktesterConfig {
-  symbol: string
-  data: SymbolIntervalData
+  intervalToFindStartAndEndTimes: INTERVALS
 }
