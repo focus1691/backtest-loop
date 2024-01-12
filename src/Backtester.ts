@@ -1,4 +1,4 @@
-import { Subject } from 'rxjs'
+import { Observable, Subject } from 'rxjs'
 import { IBacktesterConfig, PriceEvent } from './lib/types'
 import { Exchange, INTERVALS, KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
 import { ICandle, IFundingRateValue, IOpenInterestValue } from '@tsquant/exchangeapi/dist/lib/types'
@@ -32,6 +32,14 @@ export class Backtester {
     this.symbolIntervalData = config.data
     this.intervalBounds = this.setupIntervalBounds(config.symbol, config.data)
     this.determineStartAndEndTimes(config.symbol)
+  }
+
+  get closedCandles(): Observable<ICandle> {
+    return this.closedCandles$.asObservable()
+  }
+
+  get priceEvents(): Observable<PriceEvent> {
+    return this.priceEvents$.asObservable()
   }
 
   // Find the start and end times based on the candles data
