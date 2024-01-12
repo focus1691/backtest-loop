@@ -56,14 +56,14 @@ export class Backtester {
       return
     }
 
-    if (!this.symbol) {
+    if (!symbol) {
       throw new Error('Symbol required')
     }
     if (!candles) {
       throw new Error('Candles are undefined or null')
     }
 
-    if (!(this.symbol in candles)) {
+    if (!(symbol in candles)) {
       throw new Error(`No data for symbol: ${this.symbol}`)
     }
 
@@ -72,11 +72,11 @@ export class Backtester {
       throw new Error('Interval is undefined')
     }
 
-    if (!(interval in candles[this.symbol])) {
+    if (!(interval in candles[symbol])) {
       throw new Error(`No data for interval: ${interval} for symbol: ${this.symbol}`)
     }
 
-    const candleData = candles[this.symbol][interval]
+    const candleData = candles[symbol][interval]
     if (!candleData || candleData.length === 0) {
       throw new Error(`No candle data for interval: ${interval} and symbol: ${this.symbol}`)
     }
@@ -88,6 +88,8 @@ export class Backtester {
 
     this.intervalBounds = this.setupIntervalBounds(symbol, candles)
     this.determineStartAndEndTimes(symbol)
+
+    return this
   }
 
   // Find the start and end times based on the candles data
