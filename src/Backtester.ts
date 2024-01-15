@@ -1,29 +1,14 @@
 import { Observable, Subject } from 'rxjs'
-import { IBacktesterConfig, ITimeInterval, PriceEvent } from './lib/types'
+import { IBacktesterConfig, IDataset, ITimeInterval, ITimeseriesField, PriceEvent } from './lib/types'
+import { isValidTimeseries } from './utils/validate'
 import { Exchange, INTERVALS, KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
-
-interface ITimeseriesField {
-  timestamp?: number
-}
-
-interface ITimeseriesColumn {
-  type: string
-  data: ITimeseriesField[]
-}
-
-interface IDataset {
-  timeseries: ITimeseriesColumn[]
-  prices: ITimeseriesField[]
-}
+import { ICandle } from '@tsquant/exchangeapi/dist/lib/types'
 
 export class Backtester {
   private config: IBacktesterConfig
 
   private typeBasedTimeIntervals: Map<string, ITimeInterval> = new Map()
 
-  // private symbol: string
-  // private candles: SymbolIntervalData
-  // private typeBasedTimeIntervals: SymbolIntervalIndexes
   private currTime: Date = new Date()
   private didInitCandles: boolean = false
 
@@ -35,10 +20,6 @@ export class Backtester {
   private eventEmitted: boolean = false
 
   // Websocket type events
-  // private closedCandles$: Subject<ICandle> = new Subject()
-  // private priceEvents$: Subject<PriceEvent> = new Subject()
-
-  // private closedCandles$: Subject<ICandle> = new Subject()
   private priceEvents$: Subject<ITimeseriesField> = new Subject()
   private dataEvent$: Subject<ITimeseriesField> = new Subject()
 
@@ -49,8 +30,8 @@ export class Backtester {
     }
   }
 
-  get priceEvents(): Observable<ITimeseriesField> {
-    return this.priceEvents$.asObservable()
+  get dataEvents(): Observable<ITimeseriesField> {
+    return this.dataEvent$.asObservable()
   }
 
   setData(data: IDataset) {
@@ -64,56 +45,22 @@ export class Backtester {
     }
 
     for (const timeseries of data.timeseries) {
-      console.log(timeseries)
+      if (typeof timeseries?.type !== 'string' || !timeseries?.data?.length) {
+        if (isValidTimeseries(timeseries)) {
+          const start: number = timeseries.data[0].timestamp
+          const end: number = timeseries.data[timeseries.data.length - 1].timestamp
+          this.typeBasedTimeIntervals.set(timeseries.type, { start, end, isComplete: false, data: timeseries.data })
+        } else {
+          this.typeBasedTimeIntervals.clear()
+          this.didInitCandles = false
+          throw new Error('Invalid timeseries: Missing or incorrect type/data or timestamp')
+        }
+      }
     }
-
-    // const interval = this.config.intervalToFindStartAndEndTimes
-    // if (!interval) {
-    //   throw new Error('Interval is undefined')
-    // }
-
-    if (!(interval in candles[symbol])) {
-      throw new Error(`No data for interval: ${interval} for symbol: ${this.symbol}`)
-    }
-
-    const candleData = candles[symbol][interval]
-    if (!candleData || candleData.length === 0) {
-      throw new Error(`No candle data for interval: ${interval} and symbol: ${this.symbol}`)
-    }
-
-    this.symbol = symbol
-    this.data = data
 
     this.didInitCandles = true
 
-    this.typeBasedTimeIntervals = this.setupIntervalBounds(symbol, candles)
-    this.determineStartAndEndTimes(symbol)
-
     return this
-  }
-
-  // Find the start and end times based on the candles data
-  private determineStartAndEndTimes(symbol: string) {
-    const oneMinuteCandles: ICandle[] = this.candles[symbol][this.config.intervalToFindStartAndEndTimes] as ICandle[]
-
-    if (oneMinuteCandles && oneMinuteCandles.length > 0) {
-      const symbolStartTime = new Date(oneMinuteCandles[0].openTime) // First candle's open time
-
-      // Set currTime to 1 minute before startTime
-      this.currTime = new Date(symbolStartTime.getTime() - KlineIntervalMs['1m'])
-    } else {
-      throw new Error('Could not determine start and end')
-    }
-  }
-
-  // Initialize indexes for each symbol and interval
-  private setupIntervalBounds(symbol: string, candles: SymbolIntervalData) {
-    const bounds: SymbolIntervalIndexes = { [symbol]: {} }
-
-    for (const interval in candles[symbol]) {
-      bounds[symbol][interval] = { curr: 0, start: 0, end: 0, isComplete: false }
-    }
-    return bounds
   }
 
   stepForward() {
