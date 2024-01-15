@@ -1,26 +1,29 @@
 import { Observable, Subject } from 'rxjs'
-import { IBacktesterConfig, PriceEvent } from './lib/types'
+import { IBacktesterConfig, ITimeInterval, PriceEvent } from './lib/types'
 import { Exchange, INTERVALS, KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
-import { ICandle, IFundingRateValue, IOpenInterestValue } from '@tsquant/exchangeapi/dist/lib/types'
 
-export type SymbolIntervalData = {
-  [symbol: string]: {
-    [interval: string]: (IFundingRateValue | ICandle | IOpenInterestValue)[]
-  }
+interface ITimeseriesField {
+  timestamp?: number
 }
 
-type SymbolIntervalIndexes = {
-  [symbol: string]: {
-    [interval: string]: { curr: number; start: number; end: number; isComplete: boolean }
-  }
+interface ITimeseriesColumn {
+  type: string
+  data: ITimeseriesField[]
+}
+
+interface IDataset {
+  timeseries: ITimeseriesColumn[]
+  prices: ITimeseriesField[]
 }
 
 export class Backtester {
   private config: IBacktesterConfig
 
-  private symbol: string
-  private candles: SymbolIntervalData
-  private intervalBounds: SymbolIntervalIndexes
+  private typeBasedTimeIntervals: Map<string, ITimeInterval> = new Map()
+
+  // private symbol: string
+  // private candles: SymbolIntervalData
+  // private typeBasedTimeIntervals: SymbolIntervalIndexes
   private currTime: Date = new Date()
   private didInitCandles: boolean = false
 
@@ -32,45 +35,42 @@ export class Backtester {
   private eventEmitted: boolean = false
 
   // Websocket type events
-  private closedCandles$: Subject<ICandle> = new Subject()
-  private priceEvents$: Subject<PriceEvent> = new Subject()
+  // private closedCandles$: Subject<ICandle> = new Subject()
+  // private priceEvents$: Subject<PriceEvent> = new Subject()
+
+  // private closedCandles$: Subject<ICandle> = new Subject()
+  private priceEvents$: Subject<ITimeseriesField> = new Subject()
+  private dataEvent$: Subject<ITimeseriesField> = new Subject()
 
   constructor(config?: IBacktesterConfig) {
     this.config = {
-      intervalToFindStartAndEndTimes: INTERVALS.ONE_MINUTE,
+      typeBasedTimeIntervals: new Map(),
       ...config
     }
   }
 
-  get closedCandles(): Observable<ICandle> {
-    return this.closedCandles$.asObservable()
-  }
-
-  get priceEvents(): Observable<PriceEvent> {
+  get priceEvents(): Observable<ITimeseriesField> {
     return this.priceEvents$.asObservable()
   }
 
-  init(symbol: string, candles: SymbolIntervalData) {
+  setData(data: IDataset) {
     if (this.didInitCandles) {
-      console.warn('Backtester is running and has already been initialised with candles')
+      console.warn('Backtester is running and has already been initialised')
       return
     }
 
-    if (!symbol) {
-      throw new Error('Symbol required')
-    }
-    if (!candles) {
-      throw new Error('Candles are undefined or null')
+    if (Object.keys(data.timeseries).length <= 0) {
+      throw new Error('No dataset passed')
     }
 
-    if (!(symbol in candles)) {
-      throw new Error(`No data for symbol: ${this.symbol}`)
+    for (const timeseries of data.timeseries) {
+      console.log(timeseries)
     }
 
-    const interval = this.config.intervalToFindStartAndEndTimes
-    if (!interval) {
-      throw new Error('Interval is undefined')
-    }
+    // const interval = this.config.intervalToFindStartAndEndTimes
+    // if (!interval) {
+    //   throw new Error('Interval is undefined')
+    // }
 
     if (!(interval in candles[symbol])) {
       throw new Error(`No data for interval: ${interval} for symbol: ${this.symbol}`)
@@ -82,11 +82,11 @@ export class Backtester {
     }
 
     this.symbol = symbol
-    this.candles = candles
+    this.data = data
 
     this.didInitCandles = true
 
-    this.intervalBounds = this.setupIntervalBounds(symbol, candles)
+    this.typeBasedTimeIntervals = this.setupIntervalBounds(symbol, candles)
     this.determineStartAndEndTimes(symbol)
 
     return this
@@ -123,8 +123,8 @@ export class Backtester {
       const candles = this.candles[this.symbol][interval]
 
       // Check if the current time is the time for the next candle in this interval
-      if (!this.intervalBounds[this.symbol][interval].isComplete) {
-        const candle: ICandle = candles[this.intervalBounds[this.symbol][interval].curr] as ICandle
+      if (!this.typeBasedTimeIntervals[this.symbol][interval].isComplete) {
+        const candle: ICandle = candles[this.typeBasedTimeIntervals[this.symbol][interval].curr] as ICandle
         const nextCandleTime = new Date(candle.openTime)
 
         if (this.currTime >= nextCandleTime) {
@@ -138,9 +138,9 @@ export class Backtester {
 
           this.eventEmitted = true
 
-          this.intervalBounds[this.symbol][interval].curr++
+          this.typeBasedTimeIntervals[this.symbol][interval].curr++
 
-          this.intervalBounds[this.symbol][interval].isComplete = this.intervalBounds[this.symbol][interval].curr >= candles.length
+          this.typeBasedTimeIntervals[this.symbol][interval].isComplete = this.typeBasedTimeIntervals[this.symbol][interval].curr >= candles.length
         }
       }
     }
@@ -148,7 +148,7 @@ export class Backtester {
 
   shouldContinueBacktest(): boolean {
     for (const interval in this.candles[this.symbol]) {
-      if (!this.intervalBounds[this.symbol][interval].isComplete) return true
+      if (!this.typeBasedTimeIntervals[this.symbol][interval].isComplete) return true
     }
     return false
   }
@@ -173,7 +173,7 @@ export class Backtester {
     }
   }
 
-  acknowledgeEventHandling() {
+  releaseNextTick() {
     if (this.acknowledgementPromiseResolve) {
       this.acknowledgementPromiseResolve()
       this.acknowledgementPromiseResolve = null
