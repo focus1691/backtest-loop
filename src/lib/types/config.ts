@@ -1,24 +1,32 @@
-export interface IBacktesterConfig {
-  typeBasedTimeIntervals: Map<string, ITimeInterval>
+export interface IBacktestSettings {
+  dataStreams?: Map<string, IDataStream>
+  stepSize: number
 }
 
-export interface ITimeInterval {
-  start: number
-  end: number
+export interface IDataStream {
   isComplete: boolean
-  data: ITimeseriesField[]
+  index: number
+  data: ITimeStampedData[]
+  tsKey: string
 }
 
-export interface ITimeseriesField {
+export interface ITimeStampedData {
   timestamp: number
 }
 
-export interface ITimeseriesColumn {
+export interface IDataTypeStream {
   type: string
-  data: ITimeseriesField[]
+  data: ITimeStampedData[]
 }
 
-export interface IDataset {
-  timeseries: ITimeseriesColumn[]
-  prices: ITimeseriesField[]
+export interface IBacktestDataset {
+  timeseries: IDataTypeStream[]
+  prices: ITimeStampedData[]
+  tsKey: string
+}
+
+export interface ITimeSeriesEvent {
+  timestamp: number
+  type: string
+  data: any
 }
