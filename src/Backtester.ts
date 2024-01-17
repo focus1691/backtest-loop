@@ -1,5 +1,6 @@
 import { Observable, Subject } from 'rxjs'
-import { IBacktestSettings, IBacktestDataset, IDataStream, IDataTypeStream, ITimeSeriesEvent } from './lib/types'
+import { IBacktestStatus } from './lib/constants/settings'
+import { IBacktestDataset, IBacktestSettings, IDataStream, IDataTypeStream, ITimeSeriesEvent } from './lib/types'
 import { isValidTimeseries } from './utils/validate'
 import { KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
 
@@ -20,6 +21,7 @@ export class Backtester {
 
   private eventEmitted: boolean = false
   private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject()
+  private statusEventStream$: Subject<string> = new Subject()
 
   constructor(config?: IBacktestSettings) {
     this.config = {
@@ -31,6 +33,10 @@ export class Backtester {
 
   get dataEvents(): Observable<ITimeSeriesEvent[]> {
     return this.timeseriesEventStream$.asObservable()
+  }
+
+  get status(): Observable<string> {
+    return this.statusEventStream$.asObservable()
   }
 
   setData(dataset: IBacktestDataset) {
@@ -62,6 +68,8 @@ export class Backtester {
 
     this.currentSimulationTime = new Date(this.testStartTimestamp - this.config.stepSize)
     this.isBacktestInitialized = true
+
+    this.statusEventStream$.next(IBacktestStatus.OPEN)
 
     return this
   }
@@ -145,6 +153,7 @@ export class Backtester {
         yield
       }
     }
+    this.statusEventStream$.next(IBacktestStatus.CLOSE)
   }
 
   // Method to control the progression of the backtest
