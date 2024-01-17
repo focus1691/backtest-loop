@@ -40,10 +40,10 @@ export class Backtester {
     }
 
     for (const timeseries of dataset?.timeseries) {
-      const { data }: IDataTypeStream = timeseries
-      if (isValidTimeseries(timeseries, dataset.tsKey)) {
-        const startTimestampValue = data[0][dataset.tsKey]
-        const endTimestampValue = data[data.length - 1][dataset.tsKey]
+      const { tsKey, data }: IDataTypeStream = timeseries
+      if (isValidTimeseries(timeseries, tsKey)) {
+        const startTimestampValue = data[0][tsKey]
+        const endTimestampValue = data[data.length - 1][tsKey]
 
         // Convert to numbers if they are date strings
         const startTimestamp = typeof startTimestampValue === 'number' ? startTimestampValue : Date.parse(startTimestampValue)
@@ -52,7 +52,7 @@ export class Backtester {
         this.testStartTimestamp = this.testStartTimestamp === null ? startTimestamp : Math.min(this.testStartTimestamp ?? startTimestamp, startTimestamp)
         this.testEndTimestamp = this.testEndTimestamp === null ? endTimestamp : Math.max(this.testEndTimestamp ?? endTimestamp, endTimestamp)
 
-        this.dataStreams.set(timeseries.type, { isComplete: false, index: 0, data: timeseries.data, tsKey: dataset.tsKey })
+        this.dataStreams.set(timeseries.type, { isComplete: false, index: 0, data: timeseries.data, tsKey })
       } else {
         this.dataStreams.clear()
         this.isBacktestInitialized = false

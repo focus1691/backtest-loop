@@ -16,13 +16,12 @@ export interface ITimeStampedData {
 
 export interface IDataTypeStream {
   type: string
+  tsKey: string
   data: ITimeStampedData[]
 }
 
 export interface IBacktestDataset {
   timeseries: IDataTypeStream[]
-  prices: ITimeStampedData[]
-  tsKey: string
 }
 
 export interface ITimeSeriesEvent {
