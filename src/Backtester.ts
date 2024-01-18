@@ -3,6 +3,7 @@ import { IBacktestStatus } from './lib/constants/settings'
 import { IBacktestDataset, IBacktestSettings, IDataStream, IDataTypeStream, ITimeSeriesEvent } from './lib/types'
 import { isValidTimeseries } from './utils/validate'
 import { KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
+import { v4 } from 'uuid'
 
 export class Backtester {
   private config: IBacktestSettings
@@ -58,7 +59,7 @@ export class Backtester {
         this.testStartTimestamp = this.testStartTimestamp === null ? startTimestamp : Math.min(this.testStartTimestamp ?? startTimestamp, startTimestamp)
         this.testEndTimestamp = this.testEndTimestamp === null ? endTimestamp : Math.max(this.testEndTimestamp ?? endTimestamp, endTimestamp)
 
-        this.dataStreams.set(timeseries.type, { isComplete: false, index: 0, data: timeseries.data, tsKey })
+        this.dataStreams.set(v4(), { isComplete: false, index: 0, data: timeseries.data, type: timeseries.type, tsKey })
       } else {
         this.dataStreams.clear()
         this.isBacktestInitialized = false
@@ -80,12 +81,12 @@ export class Backtester {
     const dataEvents: any = []
 
     // Loop through each type in dataStreams
-    this.dataStreams.forEach((timeInterval, type) => {
-      if (!timeInterval.isComplete) {
+    this.dataStreams.forEach((datastream: IDataStream) => {
+      if (!datastream.isComplete) {
         // Check if the current index is within the range of data array
-        if (timeInterval.index < timeInterval.data.length) {
-          const timeseriesField = timeInterval.data[timeInterval.index]
-          const tsKey: string = timeInterval.tsKey
+        if (datastream.index < datastream.data.length) {
+          const timeseriesField = datastream.data[datastream.index]
+          const tsKey: string = datastream.tsKey
           const startTimestampValue = timeseriesField[tsKey]
 
           // Convert both timeseriesTimestamp and this.currentSimulationTime to milliseconds
@@ -94,17 +95,17 @@ export class Backtester {
 
           // Check if the timestamp matches current time
           if (timeseriesTime === currTimeMillis) {
-            dataEvents.push({ type, data: timeseriesField })
+            dataEvents.push({ type: datastream.type, data: timeseriesField })
             // Move to the next index
-            timeInterval.index++
+            datastream.index++
           } else if (currTimeMillis > timeseriesTime) {
             // Increment the index if it's behind the current time
-            timeInterval.index++
+            datastream.index++
           }
 
           // Check if end of data array is reached
-          if (timeInterval.index >= timeInterval.data.length) {
-            timeInterval.isComplete = true
+          if (datastream.index >= datastream.data.length) {
+            datastream.isComplete = true
           }
         }
       }
@@ -128,9 +129,9 @@ export class Backtester {
 
   hasMoreDataToProcess(): boolean {
     // Loop through each entry in dataStreams
-    for (const [type, timeInterval] of this.dataStreams) {
-      // Check if the timeInterval is not complete
-      if (!timeInterval.isComplete) return true
+    for (const [, datastream] of this.dataStreams) {
+      // Check if the datastream is not complete
+      if (!datastream.isComplete) return true
     }
     return false
   }

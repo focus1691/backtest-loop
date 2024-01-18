@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@tsquant/exchangeapi": "^0.0.29",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "uuid": "^9.0.1"
   }
 }

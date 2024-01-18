@@ -5,6 +5,7 @@ export interface IBacktestSettings {
 
 export interface IDataStream {
   isComplete: boolean
+  type: string
   index: number
   data: ITimeStampedData[]
   tsKey: string
