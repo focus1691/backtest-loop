@@ -7,18 +7,18 @@ export interface IDataStream {
   isComplete: boolean
   type: string
   index: number
-  data: ITimeStampedData[]
+  data: IFlexibleTimeData[]
   tsKey: string
 }
 
-export interface ITimeStampedData {
-  timestamp: number
+export interface IFlexibleTimeData {
+  [key: string]: number | string // Dynamic key, can be a number or an ISO string
 }
 
 export interface IDataTypeStream {
   type: string
   tsKey: string
-  data: ITimeStampedData[]
+  data: IFlexibleTimeData[]
 }
 
 export interface IBacktestDataset {
