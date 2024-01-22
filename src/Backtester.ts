@@ -75,10 +75,10 @@ export class Backtester {
     return this
   }
 
-  processNextTimeStep() {
+  processNextTimeStep(): ITimeSeriesEvent[] {
     // Increment current time
     this.currentSimulationTime = new Date(this.currentSimulationTime.getTime() + this.config.stepSize)
-    const dataEvents: any = []
+    const dataEvents: ITimeSeriesEvent[] = []
 
     // Loop through each type in dataStreams
     this.dataStreams.forEach((datastream: IDataStream) => {
@@ -95,7 +95,7 @@ export class Backtester {
 
           // Check if the timestamp matches current time
           if (timeseriesTime === currTimeMillis) {
-            dataEvents.push({ type: datastream.type, data: timeseriesField })
+            dataEvents.push({ timestamp: currTimeMillis, type: datastream.type, data: timeseriesField })
             // Move to the next index
             datastream.index++
           } else if (currTimeMillis > timeseriesTime) {
@@ -116,6 +116,7 @@ export class Backtester {
       this.timeseriesEventStream$.next(dataEvents)
       this.eventEmitted = true
     }
+    return dataEvents
   }
 
   releaseNextTick() {
@@ -148,10 +149,7 @@ export class Backtester {
 
       // Only proceed with stepForward if there's no pending event acknowledgment
       if (!this.eventEmitted) {
-        this.processNextTimeStep()
-
-        // Yield control back after stepping forward to allow for potential acknowledgement in the next iteration
-        yield
+        yield this.processNextTimeStep()
       }
     }
     this.statusEventStream$.next(IBacktestStatus.CLOSE)
