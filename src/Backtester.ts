@@ -17,11 +17,7 @@ export class Backtester {
 
   // Generator stuff
   private backtestIterator: Generator<unknown, void, unknown> | undefined
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  private acknowledgementPromiseResolve: Function | null = null
 
-  private eventEmitted: boolean = false
-  private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject()
   private statusEventStream$: Subject<string> = new Subject()
 
   constructor(config?: IBacktestSettings) {
@@ -30,10 +26,6 @@ export class Backtester {
       dataStreams: new Map(),
       ...config
     }
-  }
-
-  get dataEvents(): Observable<ITimeSeriesEvent[]> {
-    return this.timeseriesEventStream$.asObservable()
   }
 
   get status(): Observable<string> {
@@ -110,22 +102,7 @@ export class Backtester {
         }
       }
     })
-
-    // Emit event if there are matching data events
-    if (dataEvents.length > 0) {
-      this.timeseriesEventStream$.next(dataEvents)
-      this.eventEmitted = true
-    }
     return dataEvents
-  }
-
-  releaseNextTick() {
-    if (this.acknowledgementPromiseResolve) {
-      this.acknowledgementPromiseResolve()
-      this.acknowledgementPromiseResolve = null
-      this.eventEmitted = false // Reset the flag after acknowledgement
-    }
-    return this
   }
 
   hasMoreDataToProcess(): boolean {
@@ -139,18 +116,7 @@ export class Backtester {
 
   *backtestGenerator() {
     while (this.hasMoreDataToProcess()) {
-      // If an event was emitted in the previous step, wait for acknowledgement
-      if (this.eventEmitted) {
-        yield new Promise((resolve) => {
-          this.acknowledgementPromiseResolve = resolve
-        })
-        // Don't reset the flag here; it should be reset in acknowledgeEventHandling
-      }
-
-      // Only proceed with stepForward if there's no pending event acknowledgment
-      if (!this.eventEmitted) {
-        yield this.processNextTimeStep()
-      }
+      yield this.processNextTimeStep()
     }
     this.statusEventStream$.next(IBacktestStatus.CLOSE)
   }
