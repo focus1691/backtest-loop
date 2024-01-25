@@ -17,6 +17,7 @@ export class Backtester {
   // Generator stuff
   private backtestIterator: Generator<unknown, void, unknown> | undefined
 
+  private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject()
   private statusEventStream$: Subject<string> = new Subject()
 
   constructor(config?: IBacktestSettings) {
@@ -25,6 +26,10 @@ export class Backtester {
       dataStreams: new Map(),
       ...config
     }
+  }
+
+  get dataEvents(): Observable<ITimeSeriesEvent[]> {
+    return this.timeseriesEventStream$.asObservable()
   }
 
   get status(): Observable<string> {
@@ -101,6 +106,11 @@ export class Backtester {
         }
       }
     })
+
+    if (dataEvents.length > 0) {
+      this.timeseriesEventStream$.next(dataEvents)
+    }
+
     return dataEvents
   }
 
