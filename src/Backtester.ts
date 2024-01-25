@@ -2,7 +2,6 @@ import { Observable, Subject } from 'rxjs'
 import { IBacktestStatus } from './lib/constants/settings'
 import { IBacktestDataset, IBacktestSettings, IDataStream, IDataTypeStream, ITimeSeriesEvent } from './lib/types'
 import { isValidTimeseries } from './utils/validate'
-import { KlineIntervalMs } from '@tsquant/exchangeapi/dist/lib/constants'
 import { v4 } from 'uuid'
 
 export class Backtester {
@@ -22,7 +21,7 @@ export class Backtester {
 
   constructor(config?: IBacktestSettings) {
     this.config = {
-      stepSize: KlineIntervalMs['1m'],
+      stepSize: 60 * 1000, // one minute
       dataStreams: new Map(),
       ...config
     }
