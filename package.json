@@ -1,6 +1,6 @@
 {
   "name": "@tsquant/backtester",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Backtester",
   "repository": "git@github-focus1691:focus1691/chart-patterns.git",
   "author": "focus1691",
