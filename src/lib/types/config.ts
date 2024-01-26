@@ -1,6 +1,6 @@
 export interface IBacktestSettings {
   dataStreams?: Map<string, IDataStream>
-  stepSize: number
+  stepSize?: number
 }
 
 export interface IDataStream {

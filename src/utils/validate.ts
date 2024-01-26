@@ -1,11 +1,11 @@
-import { IDataTypeStream, IFlexibleTimeData } from '../lib/types'
+import { IFlexibleTimeData } from '../lib/types'
 
-export function isValidTimeseries(timeseries: IDataTypeStream, tsKey: string): boolean {
-  if (typeof timeseries?.type !== 'string' || !Array.isArray(timeseries?.data) || timeseries.data.length === 0) {
+export function isValidTimeseries(timeseries: IFlexibleTimeData[], tsKey: string): boolean {
+  if (!Array.isArray(timeseries) || timeseries.length === 0) {
     return false
   }
 
-  return timeseries.data.every((item) => {
+  return timeseries.every((item) => {
     const tsValue = item[tsKey]
     // Check if tsValue is a number or a valid date string
     return typeof tsValue === 'number' || !isNaN(Date.parse(tsValue))

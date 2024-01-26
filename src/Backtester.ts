@@ -22,7 +22,6 @@ export class Backtester {
 
   constructor(config?: IBacktestSettings) {
     this.config = {
-      stepSize: 60 * 1000, // one minute
       dataStreams: new Map(),
       ...config
     }
@@ -36,59 +35,73 @@ export class Backtester {
     return this.statusEventStream$.asObservable()
   }
 
+  start() {
+    if (this.isBacktestInitialized) {
+      console.warn('Backtester has already started')
+      return
+    }
+
+    for (const [, dataStream] of this.dataStreams) {
+      if (!isValidTimeseries(dataStream.data, dataStream.tsKey)) {
+        return
+      }
+    }
+
+    this.statusEventStream$.next(IBacktestStatus.OPEN)
+    this.isBacktestInitialized = true
+  }
+
   setData(dataset: IBacktestDataset) {
     if (this.isBacktestInitialized) {
       console.warn('Backtester is running and has already been initialised')
-      return
+      return this
     }
 
     for (const timeseries of dataset?.timeseries) {
       const { tsKey, data }: IDataTypeStream = timeseries
-      if (isValidTimeseries(timeseries, tsKey)) {
-        const startTimestampValue = data[0][tsKey]
-        const endTimestampValue = data[data.length - 1][tsKey]
-
-        // Convert to numbers if they are date strings
-        const startTimestamp = typeof startTimestampValue === 'number' ? startTimestampValue : Date.parse(startTimestampValue)
-        const endTimestamp = typeof endTimestampValue === 'number' ? endTimestampValue : Date.parse(endTimestampValue)
-
-        this.testStartTimestamp = this.testStartTimestamp === null ? startTimestamp : Math.min(this.testStartTimestamp ?? startTimestamp, startTimestamp)
-        this.testEndTimestamp = this.testEndTimestamp === null ? endTimestamp : Math.max(this.testEndTimestamp ?? endTimestamp, endTimestamp)
-
+      if (isValidTimeseries(timeseries?.data, tsKey)) {
+        this.determineStartAndEndTimes(data[0][tsKey], data[data.length - 1][tsKey])
         this.dataStreams.set(v4(), { isComplete: false, index: 0, data: timeseries.data, type: timeseries.type, tsKey })
       } else {
-        this.dataStreams.clear()
-        this.isBacktestInitialized = false
         throw new Error('Invalid timeseries: Missing or incorrect type/data or timestamp')
       }
     }
-
-    this.currentSimulationTime = new Date(this.testStartTimestamp - this.config.stepSize)
-    this.isBacktestInitialized = true
-
-    this.statusEventStream$.next(IBacktestStatus.OPEN)
-
     return this
   }
 
+  private determineStartAndEndTimes(start: string | number, end: string | number): void {
+    if (this.config.stepSize) {
+      // Convert to numbers if they are date strings
+      const startTimestamp = typeof start === 'number' ? start : Date.parse(start)
+      const endTimestamp = typeof end === 'number' ? end : Date.parse(end)
+
+      this.testStartTimestamp = this.testStartTimestamp === null ? startTimestamp : Math.min(this.testStartTimestamp ?? startTimestamp, startTimestamp)
+      this.testEndTimestamp = this.testEndTimestamp === null ? endTimestamp : Math.max(this.testEndTimestamp ?? endTimestamp, endTimestamp)
+
+      this.currentSimulationTime = new Date(this.testStartTimestamp - this.config.stepSize)
+    }
+  }
+
   processNextTimeStep(): ITimeSeriesEvent[] {
-    // Increment current time
-    this.currentSimulationTime = new Date(this.currentSimulationTime.getTime() + this.config.stepSize)
     const dataEvents: ITimeSeriesEvent[] = []
+
+    // Increment current time
+    if (this.config.stepSize) {
+      this.currentSimulationTime = new Date(this.currentSimulationTime.getTime() + this.config.stepSize)
+    }
 
     // Loop through each type in dataStreams
     this.dataStreams.forEach((datastream: IDataStream) => {
-      if (!datastream.isComplete) {
-        // Check if the current index is within the range of data array
-        if (datastream.index < datastream.data.length) {
-          const timeseriesField = datastream.data[datastream.index]
-          const tsKey: string = datastream.tsKey
-          const startTimestampValue = timeseriesField[tsKey]
+      if (!datastream.isComplete && datastream.index < datastream.data.length) {
+        const timeseriesField = datastream.data[datastream.index]
+        const tsKey: string = datastream.tsKey
+        const startTimestampValue = timeseriesField[tsKey]
 
-          // Convert both timeseriesTimestamp and this.currentSimulationTime to milliseconds
-          const timeseriesTime = typeof startTimestampValue === 'number' ? startTimestampValue : Date.parse(startTimestampValue)
-          const currTimeMillis = this.currentSimulationTime.getTime()
+        // Convert both timeseriesTimestamp and this.currentSimulationTime to milliseconds
+        const timeseriesTime = typeof startTimestampValue === 'number' ? startTimestampValue : Date.parse(startTimestampValue)
+        const currTimeMillis = this.currentSimulationTime.getTime()
 
+        if (this.config.stepSize) {
           // Check if the timestamp matches current time
           if (timeseriesTime === currTimeMillis) {
             dataEvents.push({ timestamp: currTimeMillis, type: datastream.type, data: timeseriesField })
@@ -98,11 +111,26 @@ export class Backtester {
             // Increment the index if it's behind the current time
             datastream.index++
           }
+        } else {
+          // For non-time-bound backtesting, add the next data item
+          dataEvents.push({ timestamp: timeseriesTime, type: datastream.type, data: timeseriesField })
+          datastream.index++
 
-          // Check if end of data array is reached
-          if (datastream.index >= datastream.data.length) {
-            datastream.isComplete = true
+          // Also include adjacent data with the same timestamp
+          while (datastream.index < datastream.data.length) {
+            const nextItem = datastream.data[datastream.index]
+            const nextTimestamp = typeof nextItem[tsKey] === 'number' ? nextItem[tsKey] : Date.parse(nextItem[tsKey] as string)
+            if (nextTimestamp !== timeseriesTime) {
+              break
+            }
+            dataEvents.push({ timestamp: nextTimestamp, type: datastream.type, data: nextItem })
+            datastream.index++
           }
+        }
+
+        // Check if end of data array is reached
+        if (datastream.index >= datastream.data.length) {
+          datastream.isComplete = true
         }
       }
     })
