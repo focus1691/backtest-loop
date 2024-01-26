@@ -96,6 +96,7 @@ export class Backtester {
         const timeseriesField = datastream.data[datastream.index]
         const tsKey: string = datastream.tsKey
         const startTimestampValue = timeseriesField[tsKey]
+        const type: string = datastream.type ?? (timeseriesField?.type as string) ?? 'unknown'
 
         // Convert both timeseriesTimestamp and this.currentSimulationTime to milliseconds
         const timeseriesTime = typeof startTimestampValue === 'number' ? startTimestampValue : Date.parse(startTimestampValue)
@@ -104,7 +105,7 @@ export class Backtester {
         if (this.config.stepSize) {
           // Check if the timestamp matches current time
           if (timeseriesTime === currTimeMillis) {
-            dataEvents.push({ timestamp: currTimeMillis, type: datastream.type, data: timeseriesField })
+            dataEvents.push({ timestamp: currTimeMillis, type, data: timeseriesField })
             // Move to the next index
             datastream.index++
           } else if (currTimeMillis > timeseriesTime) {
@@ -113,17 +114,18 @@ export class Backtester {
           }
         } else {
           // For non-time-bound backtesting, add the next data item
-          dataEvents.push({ timestamp: timeseriesTime, type: datastream.type, data: timeseriesField })
+          dataEvents.push({ timestamp: timeseriesTime, type, data: timeseriesField })
           datastream.index++
 
           // Also include adjacent data with the same timestamp
           while (datastream.index < datastream.data.length) {
             const nextItem = datastream.data[datastream.index]
             const nextTimestamp = typeof nextItem[tsKey] === 'number' ? nextItem[tsKey] : Date.parse(nextItem[tsKey] as string)
+            const type: string = datastream.type ?? (nextItem?.type as string) ?? 'unknown'
             if (nextTimestamp !== timeseriesTime) {
               break
             }
-            dataEvents.push({ timestamp: nextTimestamp, type: datastream.type, data: nextItem })
+            dataEvents.push({ timestamp: nextTimestamp, type, data: nextItem })
             datastream.index++
           }
         }
