@@ -11,7 +11,7 @@ export class Backtester {
 
   private testStartTimestamp
   private testEndTimestamp
-  private currentSimulationTime: Date = new Date()
+  private currentSimulationTime: number = new Date().getTime()
   private isBacktestInitialized: boolean = false
 
   // Generator stuff
@@ -72,13 +72,14 @@ export class Backtester {
   private determineStartAndEndTimes(start: string | number, end: string | number): void {
     if (this.config.stepSize) {
       // Convert to numbers if they are date strings
-      const startTimestamp = typeof start === 'number' ? start : Date.parse(start)
-      const endTimestamp = typeof end === 'number' ? end : Date.parse(end)
+      const startTimestamp = typeof start === 'number' ? start : new Date(start).getTime()
+      const endTimestamp = typeof end === 'number' ? end : new Date(end).getTime()
 
-      this.testStartTimestamp = this.testStartTimestamp === null ? startTimestamp : Math.min(this.testStartTimestamp ?? startTimestamp, startTimestamp)
-      this.testEndTimestamp = this.testEndTimestamp === null ? endTimestamp : Math.max(this.testEndTimestamp ?? endTimestamp, endTimestamp)
+      this.testStartTimestamp = Math.min(this.testStartTimestamp ?? startTimestamp)
+      this.testEndTimestamp = Math.max(this.testEndTimestamp ?? endTimestamp)
 
-      this.currentSimulationTime = new Date(this.testStartTimestamp - this.config.stepSize)
+      this.currentSimulationTime = this.testStartTimestamp - this.config.stepSize
+      console.log(start, new Date(start).getTime())
     }
   }
 
@@ -87,7 +88,7 @@ export class Backtester {
 
     // Increment current time
     if (this.config.stepSize) {
-      this.currentSimulationTime = new Date(this.currentSimulationTime.getTime() + this.config.stepSize)
+      this.currentSimulationTime += this.config.stepSize
     }
 
     // Loop through each type in dataStreams
@@ -99,16 +100,15 @@ export class Backtester {
         const type: string = datastream.type ?? (timeseriesField?.type as string) ?? 'unknown'
 
         // Convert both timeseriesTimestamp and this.currentSimulationTime to milliseconds
-        const timeseriesTime = typeof startTimestampValue === 'number' ? startTimestampValue : Date.parse(startTimestampValue)
-        const currTimeMillis = this.currentSimulationTime.getTime()
+        const timeseriesTime = typeof startTimestampValue === 'number' ? startTimestampValue : new Date(startTimestampValue).getTime()
 
         if (this.config.stepSize) {
           // Check if the timestamp matches current time
-          if (timeseriesTime === currTimeMillis) {
-            dataEvents.push({ timestamp: currTimeMillis, type, data: timeseriesField })
+          if (timeseriesTime === this.currentSimulationTime) {
+            dataEvents.push({ timestamp: this.currentSimulationTime, type, data: timeseriesField })
             // Move to the next index
             datastream.index++
-          } else if (currTimeMillis > timeseriesTime) {
+          } else if (this.currentSimulationTime > timeseriesTime) {
             // Increment the index if it's behind the current time
             datastream.index++
           }
@@ -120,7 +120,7 @@ export class Backtester {
           // Also include adjacent data with the same timestamp
           while (datastream.index < datastream.data.length) {
             const nextItem = datastream.data[datastream.index]
-            const nextTimestamp = typeof nextItem[tsKey] === 'number' ? nextItem[tsKey] : Date.parse(nextItem[tsKey] as string)
+            const nextTimestamp = typeof nextItem[tsKey] === 'number' ? nextItem[tsKey] : new Date(nextItem[tsKey] as string).getTime()
             const type: string = datastream.type ?? (nextItem?.type as string) ?? 'unknown'
             if (nextTimestamp !== timeseriesTime) {
               break
