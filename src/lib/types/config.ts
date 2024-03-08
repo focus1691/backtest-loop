@@ -1,4 +1,6 @@
 export interface IBacktestSettings {
+  startTime?: number
+  endTime?: number
   dataStreams?: Map<string, IDataStream>
   stepSize?: number
 }
@@ -6,9 +8,9 @@ export interface IBacktestSettings {
 export interface IDataStream {
   isComplete: boolean
   type: string
-  index: number
   data: IFlexibleTimeData[]
   tsKey: string
+  requestMoreData: boolean
 }
 
 export interface IFlexibleTimeData {
@@ -19,6 +21,7 @@ export interface IDataTypeStream {
   type: string
   tsKey: string
   data: IFlexibleTimeData[]
+  requestMoreData: boolean
 }
 
 export interface IBacktestDataset {
