@@ -1,31 +1,25 @@
-export interface IBacktestSettings {
+export interface IBacktestConfig {
   startTime?: number
   endTime?: number
-  dataStreams?: Map<string, IDataStream>
+  timeseries?: Map<string, ITimeseries>
   stepSize?: number
 }
 
-export interface IDataStream {
+export interface ITimeseries {
   isComplete: boolean
   type: string
   data: IFlexibleTimeData[]
   tsKey: string
   requestMoreData: boolean
+  cursor?: number
 }
 
 export interface IFlexibleTimeData {
   [key: string]: number | string // Dynamic key, can be a number or an ISO string
 }
 
-export interface IDataTypeStream {
-  type: string
-  tsKey: string
-  data: IFlexibleTimeData[]
-  requestMoreData: boolean
-}
-
 export interface IBacktestDataset {
-  timeseries: IDataTypeStream[]
+  timeseries: ITimeseries[]
 }
 
 export interface ITimeSeriesEvent {

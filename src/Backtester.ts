@@ -1,12 +1,12 @@
 import { Observable, Subject } from 'rxjs'
 import { IBacktestStatus } from './lib/constants/settings'
-import { IBacktestDataset, IBacktestSettings, IDataStream, IDataTypeStream, ITimeSeriesEvent } from './lib/types'
+import { IBacktestConfig, IBacktestDataset, ITimeseries, ITimeSeriesEvent } from './lib/types'
 import { isValidTimeseries } from './utils/validate'
 
 export class Backtester {
-  private config: IBacktestSettings
+  private config: IBacktestConfig
 
-  private dataStreams: Map<string, IDataStream> = new Map()
+  private timeseries: Map<string, ITimeseries> = new Map()
 
   private testStartTimestamp
   private testEndTimestamp
@@ -19,14 +19,14 @@ export class Backtester {
   private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject()
   private statusEventStream$: Subject<string> = new Subject()
 
-  constructor(config?: IBacktestSettings) {
+  constructor(config?: IBacktestConfig) {
     this.config = {
-      dataStreams: new Map(),
+      timeseries: new Map(),
       ...config
     }
   }
 
-  get dataEvents(): Observable<ITimeSeriesEvent[]> {
+  get timeseriesEvents(): Observable<ITimeSeriesEvent[]> {
     return this.timeseriesEventStream$.asObservable()
   }
 
@@ -40,8 +40,8 @@ export class Backtester {
       return
     }
 
-    for (const [, dataStream] of this.dataStreams) {
-      if (!isValidTimeseries(dataStream.data, dataStream.tsKey)) {
+    for (const [, timeseries] of this.timeseries) {
+      if (!isValidTimeseries(timeseries.data, timeseries.tsKey)) {
         return
       }
     }
@@ -56,10 +56,10 @@ export class Backtester {
     }
 
     for (const timeseries of dataset?.timeseries) {
-      const { tsKey, type, data, requestMoreData }: IDataTypeStream = timeseries
+      const { tsKey, type, data, requestMoreData, cursor }: ITimeseries = timeseries
       if (isValidTimeseries(timeseries?.data, tsKey)) {
         this.determineStartAndEndTimes(data[0][tsKey], data[data.length - 1][tsKey])
-        this.dataStreams.set(type, { isComplete: false, data, type, tsKey, requestMoreData })
+        this.timeseries.set(type, { isComplete: false, data, type, tsKey, requestMoreData, cursor })
       } else {
         throw new Error('Invalid timeseries: Missing or incorrect type/data or timestamp')
       }
@@ -90,20 +90,20 @@ export class Backtester {
   }
 
   processNextTimeStep(): ITimeSeriesEvent[] {
-    const dataEvents: ITimeSeriesEvent[] = []
+    const timeseriesEvents: ITimeSeriesEvent[] = []
 
     // Increment current time
     if (this.config.stepSize) {
       this.currentSimulationTime += this.config.stepSize
     }
 
-    // Loop through each type in dataStreams
-    this.dataStreams.forEach((datastream: IDataStream) => {
-      if (!datastream.isComplete && datastream.data.length) {
-        const timeseriesField = datastream.data[0]
-        const tsKey: string = datastream.tsKey
+    // Loop through each type in timeseries
+    this.timeseries.forEach((timeseries: ITimeseries) => {
+      if (!timeseries.isComplete && timeseries.data.length) {
+        const timeseriesField = timeseries.data[0]
+        const tsKey: string = timeseries.tsKey
         const startTimestampValue = timeseriesField[tsKey]
-        const type: string = datastream.type ?? (timeseriesField?.type as string) ?? 'unknown'
+        const type: string = timeseries.type ?? (timeseriesField?.type as string) ?? 'unknown'
 
         // Convert both timeseriesTimestamp and this.currentSimulationTime to milliseconds
         const timeseriesTime = typeof startTimestampValue === 'number' ? startTimestampValue : new Date(startTimestampValue).getTime()
@@ -111,53 +111,61 @@ export class Backtester {
         if (this.config.stepSize) {
           // Check if the timestamp matches current time
           if (timeseriesTime === this.currentSimulationTime) {
-            dataEvents.push({ timestamp: this.currentSimulationTime, type, data: timeseriesField })
-            datastream.data.shift() // Remove the item
+            timeseriesEvents.push({ timestamp: this.currentSimulationTime, type, data: timeseriesField })
+            timeseries.data.shift() // Remove the item
           } else if (this.currentSimulationTime > timeseriesTime) {
-            datastream.data.shift() // Remove the item
+            timeseries.data.shift() // Remove the item
           }
         } else {
           // For non-time-bound backtesting, add the next data item
-          dataEvents.push({ timestamp: timeseriesTime, type, data: timeseriesField })
+          timeseriesEvents.push({ timestamp: timeseriesTime, type, data: timeseriesField })
 
           // Also include adjacent data with the same timestamp
-          while (datastream.data.length) {
-            const nextItem = datastream.data[0]
+          while (timeseries.data.length) {
+            const nextItem = timeseries.data[0]
             const nextTimestamp = typeof nextItem[tsKey] === 'number' ? nextItem[tsKey] : new Date(nextItem[tsKey] as string).getTime()
-            const type: string = datastream.type ?? (nextItem?.type as string) ?? 'unknown'
+            const type: string = timeseries.type ?? (nextItem?.type as string) ?? 'unknown'
             if (nextTimestamp !== timeseriesTime) {
               break
             }
-            dataEvents.push({ timestamp: nextTimestamp, type, data: nextItem })
-            datastream.data.shift() // Remove the item
+            timeseriesEvents.push({ timestamp: nextTimestamp, type, data: nextItem })
+            timeseries.data.shift() // Remove the item
           }
         }
 
         // Check if end of data array is reached
-        if (datastream.data.length === 0) {
-          datastream.isComplete = true
+        if (timeseries.data.length === 0 && !timeseries.requestMoreData) {
+          timeseries.isComplete = true
         }
       }
     })
 
-    if (dataEvents.length > 0) {
-      this.timeseriesEventStream$.next(dataEvents)
+    if (timeseriesEvents.length > 0) {
+      this.timeseriesEventStream$.next(timeseriesEvents)
     }
 
-    return dataEvents
+    return timeseriesEvents
+  }
+
+  updateTimeseriesProperty(type: string, fieldName: string, value: any): void {
+    const timeseries = this.timeseries.get(type)
+
+    if (timeseries) {
+      timeseries[fieldName] = value
+    }
   }
 
   hasMoreDataToProcess(): boolean {
-    // Loop through each entry in dataStreams
-    for (const [, datastream] of this.dataStreams) {
-      // Check if the datastream is not complete
-      if (!datastream.isComplete) return true
+    // Loop through each entry in timeseries
+    for (const [, timeseries] of this.timeseries) {
+      // Check if the timeseries is not complete
+      if (!timeseries.isComplete) return true
     }
     return false
   }
 
-  isDataEmpty(type: string): boolean {
-    return this.dataStreams.get(type)?.data.length === 0
+  getTimeseries(type: string): ITimeseries | undefined {
+    return this.timeseries.get(type)
   }
 
   *backtestGenerator() {
