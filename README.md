@@ -1,6 +1,6 @@
-# @focus1691/backtest-loop
+# backtest-loop
 
-[![npm version](https://badge.fury.io/js/%40focus1691%2Fbacktest-loop.svg)](https://www.npmjs.com/package/@focus1691/backtest-loop)
+[![npm version](https://badge.fury.io/js/%40focus1691%2Fbacktest-loop.svg)](https://www.npmjs.com/package/backtest-loop)
 [![GitHub license](https://img.shields.io/github/license/focus1691/backtest-loop.svg)](https://github.com/focus1691/backtest-loop/blob/master/LICENSE)
 
 A simple backtesting loop to replay data.
@@ -10,13 +10,13 @@ A simple backtesting loop to replay data.
 Install this package by running the following command:
 
 ```bash
-npm install @focus1691/backtest-loop
+npm install backtest-loop
 ```
 
 ## Usage
 
 ```ts
-import { Backtester, ITimeseries, ITimeSeriesEvent } from '@focus1691/backtest-loop';
+import { Backtester, ITimeseries, ITimeSeriesEvent } from 'backtest-loop';
 
 const ONE_MINUTE = 60000; // Time step size in milliseconds
 const bt = new Backtester({ stepSize: ONE_MINUTE });
