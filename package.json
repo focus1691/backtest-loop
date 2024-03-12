@@ -1,8 +1,8 @@
 {
-  "name": "@tsquant/backtester",
+  "name": "@focus1691/backtest-loop",
   "version": "0.0.19",
-  "description": "Backtester",
-  "repository": "git@github-focus1691:focus1691/chart-patterns.git",
+  "description": "A backtesting loop to replay data",
+  "repository": "git@github.com:focus1691/backtest-loop.git",
   "author": "focus1691",
   "license": "MIT",
   "main": "dist/index.js",
