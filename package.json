@@ -1,6 +1,6 @@
 {
   "name": "@focus1691/backtest-loop",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "A backtesting loop to replay data",
   "repository": "git@github.com:focus1691/backtest-loop.git",
   "author": "focus1691",
