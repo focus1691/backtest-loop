@@ -1,6 +1,6 @@
 # backtest-loop
 
-[![npm version](https://badge.fury.io/js/%40focus1691%2Fbacktest-loop.svg)](https://www.npmjs.com/package/backtest-loop)
+[![npm version](https://badge.fury.io/js/backtest-loop.svg)](https://www.npmjs.com/package/backtest-loop)
 [![GitHub license](https://img.shields.io/github/license/focus1691/backtest-loop.svg)](https://github.com/focus1691/backtest-loop/blob/master/LICENSE)
 
 A simple backtesting loop to replay data.
