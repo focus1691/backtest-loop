@@ -1,3 +1,4 @@
+import { convertToTimestamp } from './normalise'
 import { IFlexibleTimeData } from '../lib/types'
 
 export function isValidTimeseries(timeseries: IFlexibleTimeData[], tsKey: string): boolean {
@@ -14,8 +15,8 @@ export function isValidTimeseries(timeseries: IFlexibleTimeData[], tsKey: string
 
 export function validateCandleIntegrity(data: IFlexibleTimeData[], intervalMS: number, tsKey: string): boolean {
   for (let i = 1; i < data.length; i++) {
-    const previousTimestamp = extractTimestamp(data[i - 1][tsKey])
-    const currentTimestamp = extractTimestamp(data[i][tsKey])
+    const previousTimestamp = convertToTimestamp(data[i - 1][tsKey])
+    const currentTimestamp = convertToTimestamp(data[i][tsKey])
 
     // Check if the difference between the current and previous timestamps matches the interval
     if (currentTimestamp - previousTimestamp !== intervalMS) {
@@ -23,11 +24,4 @@ export function validateCandleIntegrity(data: IFlexibleTimeData[], intervalMS: n
     }
   }
   return true // All candles are correctly spaced
-}
-
-function extractTimestamp(value: number | string): number {
-  if (typeof value === 'string') {
-    return new Date(value).getTime()
-  }
-  return value
 }

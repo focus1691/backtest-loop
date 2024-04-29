@@ -1,6 +1,7 @@
 import { Observable, Subject } from 'rxjs'
 import { IBacktestStatus } from './lib/constants/settings'
 import { IBacktestConfig, IBacktestDataset, ITimeseries, ITimeSeriesEvent } from './lib/types'
+import { convertToTimestamp } from './utils/normalise'
 import { isValidTimeseries } from './utils/validate'
 
 export class Backtester {
@@ -68,24 +69,23 @@ export class Backtester {
   }
 
   setStartTime(timestamp: number): void {
-    this.testStartTimestamp = timestamp
+    if (!this.testStartTimestamp || timestamp < this.testStartTimestamp) {
+      this.testStartTimestamp = timestamp
+    }
   }
 
   setEndTime(timestamp: number): void {
-    this.testEndTimestamp = timestamp
+    if (!this.testEndTimestamp || timestamp < this.testEndTimestamp) {
+      this.testEndTimestamp = timestamp
+    }
   }
 
   private determineStartAndEndTimes(start: string | number, end: string | number): void {
     if (this.config.stepSize) {
-      // Convert to numbers if they are date strings
-      const startTimestamp = typeof start === 'number' ? start : new Date(start).getTime()
-      const endTimestamp = typeof end === 'number' ? end : new Date(end).getTime()
-
-      this.setStartTime(Math.min(this.testStartTimestamp ?? startTimestamp))
-      this.setEndTime(Math.max(this.testEndTimestamp ?? endTimestamp))
+      this.setStartTime(convertToTimestamp(start))
+      this.setEndTime(convertToTimestamp(end))
 
       this.currentSimulationTime = this.testStartTimestamp - this.config.stepSize
-      console.log(start, new Date(start).getTime())
     }
   }
 
