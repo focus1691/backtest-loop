@@ -15,7 +15,7 @@ export interface ITimeseries {
 }
 
 export interface IFlexibleTimeData {
-  [key: string]: number | string // Dynamic key, can be a number or an ISO string
+  [key: string]: number | string | Date // Dynamic key, can be a number or an ISO string or Date
 }
 
 export interface IBacktestDataset {

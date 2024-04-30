@@ -80,7 +80,7 @@ export class Backtester {
     }
   }
 
-  private determineStartAndEndTimes(start: string | number, end: string | number): void {
+  private determineStartAndEndTimes(start: string | number | Date, end: string | number | Date): void {
     if (this.config.stepSize) {
       this.setStartTime(convertToTimestamp(start))
       this.setEndTime(convertToTimestamp(end))
