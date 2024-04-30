@@ -8,8 +8,8 @@ export function isValidTimeseries(timeseries: IFlexibleTimeData[], tsKey: string
 
   return timeseries.every((item) => {
     const tsValue = item[tsKey]
-    // Check if tsValue is a number or a valid date string
-    return typeof tsValue === 'number' || !isNaN(Date.parse(tsValue))
+    // Check if tsValue is a number or a valid date string or a Date
+    return typeof tsValue === 'number' || tsValue instanceof Date || !isNaN(Date.parse(tsValue))
   })
 }
 
