@@ -12,9 +12,8 @@ export class Backtester {
   private testStartTimestamp
   private testEndTimestamp
   private currentSimulationTime: number = new Date().getTime()
-  private isBacktestInitialized: boolean = false
+  private isBacktestInitialised: boolean = false
 
-  // Generator stuff
   private backtestIterator: Generator<unknown, void, unknown> | undefined
 
   private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject()
@@ -36,7 +35,7 @@ export class Backtester {
   }
 
   start() {
-    if (this.isBacktestInitialized) {
+    if (this.isBacktestInitialised) {
       console.warn('Backtester has already started')
       return
     }
@@ -48,14 +47,22 @@ export class Backtester {
     }
 
     this.statusEventStream$.next(IBacktestStatus.OPEN)
-    this.isBacktestInitialized = true
+    this.isBacktestInitialised = true
+  }
+
+  terminate() {
+    this.clear()
+    this.statusEventStream$.next(IBacktestStatus.CLOSE)
+  }
+
+  private clear() {
+    this.timeseries.clear()
+    this.isBacktestInitialised = false
+    this.testStartTimestamp = null
+    this.testEndTimestamp = null
   }
 
   setData(dataset: IBacktestDataset) {
-    if (this.isBacktestInitialized) {
-      console.warn('Backtester is running and has already been initialised')
-    }
-
     for (const timeseries of dataset?.timeseries) {
       const { tsKey, type, data, requestMoreData, cursor }: ITimeseries = timeseries
       if (isValidTimeseries(timeseries?.data, tsKey)) {
@@ -112,9 +119,9 @@ export class Backtester {
           // Check if the timestamp matches current time
           if (timeseriesTime === this.currentSimulationTime) {
             timeseriesEvents.push({ timestamp: this.currentSimulationTime, type, data: timeseriesField })
-            timeseries.data.shift() // Remove the item
+            timeseries.data.shift()
           } else if (this.currentSimulationTime > timeseriesTime) {
-            timeseries.data.shift() // Remove the item
+            timeseries.data.shift()
           }
         } else {
           // For non-time-bound backtesting, add the next data item
@@ -129,7 +136,7 @@ export class Backtester {
               break
             }
             timeseriesEvents.push({ timestamp: nextTimestamp, type, data: nextItem })
-            timeseries.data.shift() // Remove the item
+            timeseries.data.shift()
           }
         }
 
@@ -156,9 +163,7 @@ export class Backtester {
   }
 
   hasMoreDataToProcess(): boolean {
-    // Loop through each entry in timeseries
     for (const [, timeseries] of this.timeseries) {
-      // Check if the timeseries is not complete
       if (!timeseries.isComplete) return true
     }
     return false
@@ -175,10 +180,9 @@ export class Backtester {
     this.statusEventStream$.next(IBacktestStatus.CLOSE)
   }
 
-  // Method to control the progression of the backtest
   runNextStep() {
-    if (!this.isBacktestInitialized) {
-      console.log('Backtest not initialised with data. Call init() before calling this method.')
+    if (!this.isBacktestInitialised) {
+      return null
     }
     if (!this.backtestIterator) {
       this.backtestIterator = this.backtestGenerator()
