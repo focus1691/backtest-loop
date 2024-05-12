@@ -4,7 +4,7 @@ import { IBacktestConfig, IBacktestDataset, ITimeseries, ITimeSeriesEvent } from
 import { convertToTimestamp } from './utils/normalise'
 import { isValidTimeseries } from './utils/validate'
 
-export class Backtester {
+export class BacktestLoop {
   private config: IBacktestConfig
 
   private timeseries: Map<string, ITimeseries> = new Map()
@@ -18,6 +18,8 @@ export class Backtester {
 
   private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject()
   private statusEventStream$: Subject<string> = new Subject()
+
+  public isActive: boolean = false
 
   constructor(config?: IBacktestConfig) {
     this.config = {
@@ -48,18 +50,20 @@ export class Backtester {
 
     this.statusEventStream$.next(IBacktestStatus.OPEN)
     this.isBacktestInitialised = true
+    this.isActive = true
   }
 
   terminate() {
-    this.clear()
+    this.clearState()
     this.statusEventStream$.next(IBacktestStatus.CLOSE)
   }
 
-  private clear() {
+  private clearState() {
     this.timeseries.clear()
     this.isBacktestInitialised = false
     this.testStartTimestamp = null
     this.testEndTimestamp = null
+    this.isActive = false
   }
 
   setData(dataset: IBacktestDataset) {
@@ -173,10 +177,11 @@ export class Backtester {
     return this.timeseries.get(type)
   }
 
-  *backtestGenerator() {
+  private *backtestGenerator() {
     while (this.hasMoreDataToProcess()) {
       yield this.processNextTimeStep()
     }
+    this.isActive = false
     this.statusEventStream$.next(IBacktestStatus.CLOSE)
   }
 
