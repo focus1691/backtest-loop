@@ -192,6 +192,6 @@ export class BacktestLoop {
     if (!this.backtestIterator) {
       this.backtestIterator = this.backtestGenerator()
     }
-    return this.backtestIterator.next().value
+    return this.backtestIterator.next().value ?? []
   }
 }
