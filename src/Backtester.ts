@@ -200,10 +200,6 @@ export class BacktestLoop {
     return false;
   }
 
-  getTimeseries(type: string): ITimeseries | undefined {
-    return this.timeseries.get(type);
-  }
-
   isTimeseriesIteratorComplete(type: string): boolean {
     const nextEvent = this.nextEvents.get(type);
     return nextEvent === null;
