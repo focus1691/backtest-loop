@@ -188,7 +188,6 @@ export class BacktestLoop {
     if (timeseries) {
       timeseries[fieldName] = value
       if (fieldName === 'data') {
-        // Reset the iterator for this timeseries
         this.resetIterator(type, timeseries)
       }
     }
@@ -203,6 +202,11 @@ export class BacktestLoop {
 
   getTimeseries(type: string): ITimeseries | undefined {
     return this.timeseries.get(type)
+  }
+
+  isTimeseriesIteratorComplete(type: string): boolean {
+    const nextEvent = this.nextEvents.get(type)
+    return nextEvent === null
   }
 
   runNextStep() {
