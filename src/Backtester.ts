@@ -60,15 +60,11 @@ export class BacktestLoop {
     this.isActive = true;
   }
 
-  terminate() {
-    this.clearState();
-    this.statusEventStream$.next(IBacktestStatus.CLOSE);
-  }
-
-  private clearState() {
+  reset() {
     this.timeseries.clear();
     this.timeseriesIterators.clear();
     this.nextEvents.clear();
+    this.currentIndices.clear();
     this.isBacktestInitialised = false;
     this.startTimestamp = 0;
     this.endTimestamp = 0;
@@ -77,10 +73,10 @@ export class BacktestLoop {
 
   setData(dataset: IBacktestDataset) {
     for (const timeseries of dataset?.timeseries) {
-      const { tsKey, type, data, requestMoreData, cursor }: ITimeseries = timeseries;
+      const { tsKey, type, data, cursor }: ITimeseries = timeseries;
       if (isValidTimeseries(data, tsKey)) {
         this.determineStartAndEndTimes(data[0][tsKey], data[data.length - 1][tsKey]);
-        this.timeseries.set(type, { isComplete: false, data, type, tsKey, requestMoreData, cursor });
+        this.timeseries.set(type, { isComplete: false, data, type, tsKey, cursor });
         this.currentIndices.set(type, 0);
       } else {
         throw new Error('Invalid timeseries: Missing or incorrect type/data or timestamp');
@@ -166,7 +162,7 @@ export class BacktestLoop {
         }
 
         // Check for completion
-        if (this.nextEvents.get(type) === null && timeseries && !timeseries.requestMoreData) {
+        if (this.nextEvents.get(type) === null && timeseries) {
           timeseries.isComplete = true;
         }
       }
@@ -213,11 +209,6 @@ export class BacktestLoop {
       if (!timeseries.isComplete) return true;
     }
     return false;
-  }
-
-  isTimeseriesIteratorComplete(type: string): boolean {
-    const nextEvent = this.nextEvents.get(type);
-    return nextEvent === null;
   }
 
   runNextStep() {

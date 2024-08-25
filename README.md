@@ -36,8 +36,8 @@ bt.status.subscribe((status: string) => {
 // Set the time series data for the backtest
 bt.setData({
   timeseries: [
-    { tsKey: 'openTime', data: dataset1, type: 'candle_1m', requestMoreData: false, isComplete: false },
-    { tsKey: 'openTime', data: dataset2, type: 'candle_5m', requestMoreData: false, isComplete: false },
+    { tsKey: 'openTime', data: dataset1, type: 'candle_1m', isComplete: false },
+    { tsKey: 'openTime', data: dataset2, type: 'candle_5m', isComplete: false },
   ]
 }).start();
 

@@ -10,7 +10,6 @@ export interface ITimeseries {
   type: string;
   data: IFlexibleTimeData[];
   tsKey: string;
-  requestMoreData: boolean;
   cursor?: number;
 }
 
