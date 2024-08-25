@@ -1,2 +1,2 @@
-export * from './Backtester'
-export * from './lib/types'
+export * from './Backtester';
+export * from './lib/types';
