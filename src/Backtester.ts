@@ -51,7 +51,7 @@ export class BacktestLoop {
       }
     }
 
-    this.initializeIterators();
+    this.initialiseIterators();
     this.statusEventStream$.next(IBacktestStatus.OPEN);
     this.isBacktestInitialised = true;
     this.isActive = true;
@@ -113,7 +113,7 @@ export class BacktestLoop {
     }
   }
 
-  private initializeIterators() {
+  private initialiseIterators() {
     for (const [type, timeseries] of this.timeseries) {
       this.resetIterator(type, timeseries);
     }
