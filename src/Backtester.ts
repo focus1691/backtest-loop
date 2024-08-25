@@ -9,6 +9,8 @@ export class BacktestLoop {
   private config: IBacktestConfig;
   public isActive: boolean = false;
   private isBacktestInitialised: boolean = false;
+  private iterationCount: number = 0;
+  private readonly CLEAR_THRESHOLD: number = 20000;
 
   // Time Management
   private startTimestamp: number;
@@ -19,6 +21,7 @@ export class BacktestLoop {
   private timeseries: Map<string, ITimeseries> = new Map();
   private timeseriesIterators: Map<string, IterableIterator<ITimeSeriesEvent>> = new Map();
   private nextEvents: Map<string, ITimeSeriesEvent | null> = new Map();
+  private currentIndices: Map<string, number> = new Map();
 
   // Event Streams
   private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject();
@@ -78,6 +81,7 @@ export class BacktestLoop {
       if (isValidTimeseries(data, tsKey)) {
         this.determineStartAndEndTimes(data[0][tsKey], data[data.length - 1][tsKey]);
         this.timeseries.set(type, { isComplete: false, data, type, tsKey, requestMoreData, cursor });
+        this.currentIndices.set(type, 0);
       } else {
         throw new Error('Invalid timeseries: Missing or incorrect type/data or timestamp');
       }
@@ -113,17 +117,21 @@ export class BacktestLoop {
     }
   }
 
-  private initialiseIterators() {
-    for (const [type, timeseries] of this.timeseries) {
-      this.resetIterator(type, timeseries);
-    }
-  }
+  private clearProcessedData(type: string) {
+    const timeseries = this.timeseries.get(type);
+    const currentIndex = this.currentIndices.get(type) || 0;
 
-  private resetIterator(type: string, timeseries: ITimeseries) {
-    const iterator = this.timeseriesGenerator(timeseries);
-    this.timeseriesIterators.set(type, iterator);
-    const nextValue = iterator.next();
-    this.nextEvents.set(type, nextValue.done ? null : nextValue.value);
+    if (timeseries && currentIndex > 0) {
+      timeseries.data.splice(0, currentIndex);
+      this.currentIndices.set(type, 0);
+
+      this.resetIterator(type, timeseries);
+
+      if (timeseries.data.length > 0) {
+        const firstEventTime = convertToTimestamp(timeseries.data[0][timeseries.tsKey]);
+        this.currentTime = Math.min(this.currentTime, firstEventTime);
+      }
+    }
   }
 
   processNextTimeStep(): ITimeSeriesEvent[] {
@@ -171,6 +179,12 @@ export class BacktestLoop {
     return timeseriesEvents;
   }
 
+  private initialiseIterators() {
+    for (const [type, timeseries] of this.timeseries) {
+      this.resetIterator(type, timeseries);
+    }
+  }
+
   private advanceIterator(type: string) {
     const iterator = this.timeseriesIterators.get(type);
     if (!iterator) {
@@ -181,16 +195,17 @@ export class BacktestLoop {
 
     const nextValue = iterator.next();
     this.nextEvents.set(type, nextValue.done ? null : nextValue.value);
+
+    const currentIndex = this.currentIndices.get(type) || 0;
+    this.currentIndices.set(type, currentIndex + 1);
   }
 
-  updateTimeseriesProperty(type: string, fieldName: string, value: any): void {
-    const timeseries = this.timeseries.get(type);
-    if (timeseries) {
-      timeseries[fieldName] = value;
-      if (fieldName === 'data') {
-        this.resetIterator(type, timeseries);
-      }
-    }
+  private resetIterator(type: string, timeseries: ITimeseries) {
+    const iterator = this.timeseriesGenerator(timeseries);
+    this.timeseriesIterators.set(type, iterator);
+    const nextValue = iterator.next();
+    this.nextEvents.set(type, nextValue.done ? null : nextValue.value);
+    this.currentIndices.set(type, 0);
   }
 
   hasMoreDataToProcess(): boolean {
@@ -210,7 +225,17 @@ export class BacktestLoop {
       return null;
     }
     if (this.hasMoreDataToProcess()) {
-      return this.processNextTimeStep();
+      const events = this.processNextTimeStep();
+      this.iterationCount++;
+
+      if (this.iterationCount >= this.CLEAR_THRESHOLD) {
+        for (const [type] of this.timeseries) {
+          this.clearProcessedData(type);
+        }
+        this.iterationCount = 0;
+      }
+
+      return events;
     }
     this.isActive = false;
     this.statusEventStream$.next(IBacktestStatus.CLOSE);
