@@ -5,21 +5,24 @@ import { convertToTimestamp } from './utils/normalise'
 import { isValidTimeseries } from './utils/validate'
 
 export class BacktestLoop {
+  // Configuration and State
   private config: IBacktestConfig
-
-  private timeseries: Map<string, ITimeseries> = new Map()
-
-  private testStartTimestamp
-  private testEndTimestamp
-  private currentSimulationTime: number = new Date().getTime()
+  public isActive: boolean = false
   private isBacktestInitialised: boolean = false
 
-  private backtestIterator: Generator<unknown, void, unknown> | undefined
+  // Time Management
+  private startTimestamp: number
+  private endTimestamp: number
+  private currentTime: number = new Date().getTime()
 
+  // Timeseries Management
+  private timeseries: Map<string, ITimeseries> = new Map()
+  private timeseriesIterators: Map<string, IterableIterator<ITimeSeriesEvent>> = new Map()
+  private nextEvents: Map<string, ITimeSeriesEvent | null> = new Map()
+
+  // Event Streams
   private timeseriesEventStream$: Subject<ITimeSeriesEvent[]> = new Subject()
   private statusEventStream$: Subject<string> = new Subject()
-
-  public isActive: boolean = false
 
   constructor(config?: IBacktestConfig) {
     this.config = {
@@ -48,6 +51,7 @@ export class BacktestLoop {
       }
     }
 
+    this.initializeIterators()
     this.statusEventStream$.next(IBacktestStatus.OPEN)
     this.isBacktestInitialised = true
     this.isActive = true
@@ -60,16 +64,18 @@ export class BacktestLoop {
 
   private clearState() {
     this.timeseries.clear()
+    this.timeseriesIterators.clear()
+    this.nextEvents.clear()
     this.isBacktestInitialised = false
-    this.testStartTimestamp = null
-    this.testEndTimestamp = null
+    this.startTimestamp = 0
+    this.endTimestamp = 0
     this.isActive = false
   }
 
   setData(dataset: IBacktestDataset) {
     for (const timeseries of dataset?.timeseries) {
       const { tsKey, type, data, requestMoreData, cursor }: ITimeseries = timeseries
-      if (isValidTimeseries(timeseries?.data, tsKey)) {
+      if (isValidTimeseries(data, tsKey)) {
         this.determineStartAndEndTimes(data[0][tsKey], data[data.length - 1][tsKey])
         this.timeseries.set(type, { isComplete: false, data, type, tsKey, requestMoreData, cursor })
       } else {
@@ -80,14 +86,14 @@ export class BacktestLoop {
   }
 
   setStartTime(timestamp: number): void {
-    if (!this.testStartTimestamp || timestamp < this.testStartTimestamp) {
-      this.testStartTimestamp = timestamp
+    if (!this.startTimestamp || timestamp < this.startTimestamp) {
+      this.startTimestamp = timestamp
     }
   }
 
   setEndTime(timestamp: number): void {
-    if (!this.testEndTimestamp || timestamp < this.testEndTimestamp) {
-      this.testEndTimestamp = timestamp
+    if (!this.endTimestamp || timestamp > this.endTimestamp) {
+      this.endTimestamp = timestamp
     }
   }
 
@@ -95,61 +101,68 @@ export class BacktestLoop {
     if (this.config.stepSize) {
       this.setStartTime(convertToTimestamp(start))
       this.setEndTime(convertToTimestamp(end))
-
-      this.currentSimulationTime = this.testStartTimestamp - this.config.stepSize
+      this.currentTime = this.startTimestamp - this.config.stepSize
     }
+  }
+
+  private *timeseriesGenerator(timeseries: ITimeseries): IterableIterator<ITimeSeriesEvent> {
+    const { data, tsKey, type } = timeseries
+    for (const item of data) {
+      const timestamp = convertToTimestamp(item[tsKey])
+      yield { timestamp, type, data: item }
+    }
+  }
+
+  private initializeIterators() {
+    for (const [type, timeseries] of this.timeseries) {
+      this.resetIterator(type, timeseries)
+    }
+  }
+
+  private resetIterator(type: string, timeseries: ITimeseries) {
+    const iterator = this.timeseriesGenerator(timeseries)
+    this.timeseriesIterators.set(type, iterator)
+    const nextValue = iterator.next()
+    this.nextEvents.set(type, nextValue.done ? null : nextValue.value)
   }
 
   processNextTimeStep(): ITimeSeriesEvent[] {
     const timeseriesEvents: ITimeSeriesEvent[] = []
 
-    // Increment current time
     if (this.config.stepSize) {
-      this.currentSimulationTime += this.config.stepSize
+      this.currentTime += this.config.stepSize
     }
 
-    // Loop through each type in timeseries
-    this.timeseries.forEach((timeseries: ITimeseries) => {
-      if (!timeseries.isComplete && timeseries.data.length) {
-        const timeseriesField = timeseries.data[0]
-        const tsKey: string = timeseries.tsKey
-        const startTimestampValue = timeseriesField[tsKey]
-        const type: string = timeseries.type ?? (timeseriesField?.type as string) ?? 'unknown'
-
-        // Convert both timeseriesTimestamp and this.currentSimulationTime to milliseconds
-        const timeseriesTime = typeof startTimestampValue === 'number' ? startTimestampValue : new Date(startTimestampValue).getTime()
-
+    for (const [type, nextEvent] of this.nextEvents) {
+      if (nextEvent) {
+        const timeseries = this.timeseries.get(type)
         if (this.config.stepSize) {
-          // Check if the timestamp matches current time
-          if (timeseriesTime === this.currentSimulationTime) {
-            timeseriesEvents.push({ timestamp: this.currentSimulationTime, type, data: timeseriesField })
-            timeseries.data.shift()
-          } else if (this.currentSimulationTime > timeseriesTime) {
-            timeseries.data.shift()
+          if (nextEvent.timestamp === this.currentTime) {
+            timeseriesEvents.push(nextEvent)
+            this.advanceIterator(type)
+          } else if (this.currentTime > nextEvent.timestamp) {
+            this.advanceIterator(type)
           }
         } else {
-          // For non-time-bound backtesting, add the next data item
-          timeseriesEvents.push({ timestamp: timeseriesTime, type, data: timeseriesField })
+          // For non-time-bound backtesting
+          timeseriesEvents.push(nextEvent)
+          this.advanceIterator(type)
 
-          // Also include adjacent data with the same timestamp
-          while (timeseries.data.length) {
-            const nextItem = timeseries.data[0]
-            const nextTimestamp = typeof nextItem[tsKey] === 'number' ? nextItem[tsKey] : new Date(nextItem[tsKey] as string).getTime()
-            const type: string = timeseries.type ?? (nextItem?.type as string) ?? 'unknown'
-            if (nextTimestamp !== timeseriesTime) {
-              break
-            }
-            timeseriesEvents.push({ timestamp: nextTimestamp, type, data: nextItem })
-            timeseries.data.shift()
+          // Include adjacent data with the same timestamp
+          let adjacentEvent = this.nextEvents.get(type)
+          while (adjacentEvent && adjacentEvent.timestamp === nextEvent.timestamp) {
+            timeseriesEvents.push(adjacentEvent)
+            this.advanceIterator(type)
+            adjacentEvent = this.nextEvents.get(type)
           }
         }
 
-        // Check if end of data array is reached
-        if (timeseries.data.length === 0 && !timeseries.requestMoreData) {
+        // Check for completion
+        if (this.nextEvents.get(type) === null && timeseries && !timeseries.requestMoreData) {
           timeseries.isComplete = true
         }
       }
-    })
+    }
 
     if (timeseriesEvents.length > 0) {
       this.timeseriesEventStream$.next(timeseriesEvents)
@@ -158,11 +171,26 @@ export class BacktestLoop {
     return timeseriesEvents
   }
 
+  private advanceIterator(type: string) {
+    const iterator = this.timeseriesIterators.get(type)
+    if (!iterator) {
+      console.debug(`No iterator found for type: ${type}`)
+      this.nextEvents.set(type, null)
+      return
+    }
+
+    const nextValue = iterator.next()
+    this.nextEvents.set(type, nextValue.done ? null : nextValue.value)
+  }
+
   updateTimeseriesProperty(type: string, fieldName: string, value: any): void {
     const timeseries = this.timeseries.get(type)
-
     if (timeseries) {
       timeseries[fieldName] = value
+      if (fieldName === 'data') {
+        // Reset the iterator for this timeseries
+        this.resetIterator(type, timeseries)
+      }
     }
   }
 
@@ -177,21 +205,15 @@ export class BacktestLoop {
     return this.timeseries.get(type)
   }
 
-  private *backtestGenerator() {
-    while (this.hasMoreDataToProcess()) {
-      yield this.processNextTimeStep()
-    }
-    this.isActive = false
-    this.statusEventStream$.next(IBacktestStatus.CLOSE)
-  }
-
   runNextStep() {
     if (!this.isBacktestInitialised) {
       return null
     }
-    if (!this.backtestIterator) {
-      this.backtestIterator = this.backtestGenerator()
+    if (this.hasMoreDataToProcess()) {
+      return this.processNextTimeStep()
     }
-    return this.backtestIterator.next().value ?? []
+    this.isActive = false
+    this.statusEventStream$.next(IBacktestStatus.CLOSE)
+    return []
   }
 }
