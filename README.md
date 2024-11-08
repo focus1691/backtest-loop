@@ -3,7 +3,7 @@
 [![npm version](https://badge.fury.io/js/backtest-loop.svg)](https://www.npmjs.com/package/backtest-loop)
 [![GitHub license](https://img.shields.io/github/license/focus1691/backtest-loop.svg)](https://github.com/focus1691/backtest-loop/blob/master/LICENSE)
 
-A simple backtesting loop to replay data.
+A simple loop to walk through your candles and emit them as events for backtesting.
 
 ## Installation
 
